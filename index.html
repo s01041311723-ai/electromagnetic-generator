@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>전자기 유도 발전 시뮬레이터</title>
+<style>
+:root{--bg:#0b1220;--panel:#131f33;--panel2:#192943;--text:#eaf2ff;--muted:#a9bad2;--cyan:#55d6e8;--yellow:#ffd166;--green:#72e0a5;--line:#2c4262}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#09111f,#101d32);color:var(--text);font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif}
+header{padding:25px 5vw 16px;border-bottom:1px solid var(--line)}h1{margin:0 0 7px;font-size:clamp(24px,4vw,36px)}header p{margin:0;color:var(--muted)}
+main{max-width:1200px;margin:auto;padding:22px;display:grid;grid-template-columns:1.1fr .9fr;gap:18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 12px 30px #0003}
+.panel h2{font-size:18px;margin:0 0 14px}.visual{grid-row:span 2}
+canvas{width:100%;display:block;background:#0b1729;border-radius:12px;border:1px solid #263c5c}
+#machine{height:340px}#graph{height:235px;margin-top:8px}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.control{background:var(--panel2);padding:12px;border-radius:11px}
+.control label{display:flex;justify-content:space-between;gap:8px;font-size:14px;color:var(--muted);margin-bottom:9px}
+.control strong{color:var(--cyan);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--cyan)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
+button{background:#244466;color:white;border:1px solid #3c648c;border-radius:9px;padding:9px 14px;font-weight:650;cursor:pointer}
+button.primary{background:#087f91;border-color:#22b8ca}button:hover{filter:brightness(1.15)}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.metric{background:var(--panel2);padding:12px;border-radius:10px;min-width:0}
+.metric span{display:block;color:var(--muted);font-size:12px;margin-bottom:5px}.metric b{font-size:20px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.formula{color:#d8e8ff;background:#0b1729;padding:12px;border-radius:10px;line-height:1.8;margin-top:12px;font-size:14px}
+.note{color:var(--muted);font-size:13px;line-height:1.55;margin:10px 0 0}
+.graph-legend{display:flex;gap:15px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin-top:7px}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+footer{max-width:1200px;margin:0 auto;padding:0 22px 28px;color:var(--muted);font-size:12px}
+@media(max-width:850px){main{grid-template-columns:1fr}.visual{grid-row:auto}.controls{grid-template-columns:1fr 1fr}}
+@media(max-width:480px){main{padding:12px}.controls{grid-template-columns:1fr}.panel{padding:13px}}
+</style>
+</head>
+<body>
+<header><h1>전자기 유도 · 발전 시뮬레이터</h1><p>자석의 자기장 속에서 코일이 회전할 때 자기선속과 유도 기전력이 어떻게 변하는지 관찰해 보자.</p></header>
+<main>
+<section class="panel visual">
+<h2>① 발전기 내부와 자기장 시각화</h2>
+<canvas id="machine" width="760" height="420"></canvas>
+<div class="actions"><button class="primary" id="toggle">일시정지</button><button id="reset">초기화</button><button id="step">1회전 진행</button></div>
+<p class="note">파란색 화살표는 자기장 방향(B), 회전하는 사각형은 코일을 나타낸다. 코일의 방향이 바뀌면 코일을 통과하는 자기선속도 달라진다.</p>
+</section>
+<section class="panel">
+<h2>② 발전기 조건 조절</h2>
+<div class="controls">
+<div class="control"><label>회전 속도 <strong id="rpmVal">120 rpm</strong></label><input id="rpm" type="range" min="0" max="600" value="120" step="5"></div>
+<div class="control"><label>자기장 세기 <strong id="bVal">0.50 T</strong></label><input id="field" type="range" min="0" max="2" value="0.5" step="0.01"></div>
+<div class="control"><label>코일 감은 수 <strong id="turnVal">200회</strong></label><input id="turns" type="range" min="10" max="500" value="200" step="10"></div>
+<div class="control"><label>코일 면적 <strong id="areaVal">0.010 m²</strong></label><input id="area" type="range" min="1" max="30" value="10" step="1"></div>
+</div>
+<div class="formula">
+자기선속: <b>Φ = B A cos θ</b><br>
+유도 기전력: <b>ε = −N · ΔΦ/Δt</b><br>
+회전 코일의 최대 기전력: <b>εₘₐₓ = N B A ω</b><br>
+<small>θ: 자기장과 코일 면의 수직 방향 사이의 각도 · ω = 2π × rpm/60</small>
+</div>
+</section>
+<section class="panel">
+<h2>③ 실시간 측정값</h2>
+<div class="metrics">
+<div class="metric"><span>현재 자기선속 (1회당)</span><b id="flux">0.0000 Wb</b></div>
+<div class="metric"><span>현재 유도 기전력</span><b id="emf">0.00 V</b></div>
+<div class="metric"><span>최대 유도 기전력</span><b id="maxEmf">0.00 V</b></div>
+<div class="metric"><span>회전 주파수</span><b id="freq">2.00 Hz</b></div>
+</div>
+<h2 style="margin-top:18px">④ 회전 속도에 따른 최대 전압</h2>
+<canvas id="graph" width="650" height="270"></canvas>
+<div class="graph-legend"><span><i class="dot" style="background:#55d6e8"></i>최대 유도 기전력</span><span>현재 설정한 B, N, A 기준</span></div>
+<p class="note">회전 속도가 커질수록 단위 시간당 자기선속 변화가 커져 최대 유도 기전력이 증가한다.</p>
+</section>
+</main>
+<footer>이 시뮬레이션은 균일한 자기장 안에서 코일이 일정한 각속도로 회전하고, 코일의 저항·마찰·부하에 의한 손실은 무시한다고 가정한다. 전압은 이상적인 유도 기전력이며 실제 발전기의 출력 전압과는 차이가 있을 수 있다.</footer>
+<script>
+const $=id=>document.getElementById(id);
+const machine=$('machine'),ctx=machine.getContext('2d'),graph=$('graph'),g=graph.getContext('2d');
+let angle=0, running=true,last=0;
+const vals=()=>({rpm:+$('rpm').value,B:+$('field').value,N:+$('turns').value,A:+$('area').value/1000});
+function updateLabels(){let v=vals();$('rpmVal').textContent=v.rpm+' rpm';$('bVal').textContent=v.B.toFixed(2)+' T';$('turnVal').textContent=v.N+'회';$('areaVal').textContent=v.A.toFixed(3)+' m²';}
+function calc(){let v=vals(),w=2*Math.PI*v.rpm/60,theta=angle;let flux=v.B*v.A*Math.cos(theta);let emf=v.N*v.B*v.A*w*Math.sin(theta);let max=v.N*v.B*v.A*w;$('flux').textContent=flux.toFixed(5)+' Wb';$('emf').textContent=emf.toFixed(3)+' V';$('maxEmf').textContent=max.toFixed(3)+' V';$('freq').textContent=(v.rpm/60).toFixed(2)+' Hz';}
+function drawMachine(){
+ let w=machine.width,h=machine.height;ctx.clearRect(0,0,w,h);
+ // subtle grid
+ ctx.strokeStyle='#142943';ctx.lineWidth=1;for(let x=0;x<w;x+=38){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke()}for(let y=0;y<h;y+=38){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}
+ // magnet blocks
+ ctx.fillStyle='#a83d50';ctx.fillRect(48,112,105,195);ctx.fillStyle='#f3a0a9';ctx.font='bold 34px sans-serif';ctx.fillText('N',84,220);
+ ctx.fillStyle='#315da8';ctx.fillRect(w-153,112,105,195);ctx.fillStyle='#a9c9ff';ctx.fillText('S',84+w-153-48,220);
+ // field lines, left to right
+ ctx.strokeStyle='rgba(85,214,232,.7)';ctx.fillStyle='#55d6e8';ctx.lineWidth=2;
+ for(let y=137;y<=283;y+=29){ctx.beginPath();ctx.moveTo(160,y);ctx.lineTo(w-165,y);ctx.stroke();ctx.beginPath();ctx.moveTo(w-177,y-5);ctx.lineTo(w-165,y);ctx.lineTo(w-177,y+5);ctx.stroke()}
+ ctx.fillStyle='#8ceaf4';ctx.font='16px sans-serif';ctx.fillText('자기장 B',w/2-36,95);
+ // coil rotating projected as ellipse + frame
+ let cx=w/2,cy=h/2+4,rx=142,ry=83;
+ ctx.save();ctx.translate(cx,cy);ctx.rotate(angle);
+ ctx.strokeStyle='#ffd166';ctx.lineWidth=8;ctx.shadowColor='#ffd166';ctx.shadowBlur=12;
+ ctx.beginPath();ctx.rect(-rx,-ry,rx*2,ry*2);ctx.stroke();ctx.shadowBlur=0;
+ ctx.fillStyle='#ffe7a3';ctx.font='15px sans-serif';ctx.fillText('회전 코일',-38,-ry-15);
+ ctx.restore();
+ // axle and rotation arrow
+ ctx.strokeStyle='#d5e3f5';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(cx-190,cy);ctx.lineTo(cx+190,cy);ctx.stroke();
+ ctx.fillStyle='#d5e3f5';ctx.beginPath();ctx.arc(cx,cy,7,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle='#72e0a5';ctx.lineWidth=3;ctx.beginPath();ctx.arc(cx,cy,108,-.8,.8);ctx.stroke();
+ ctx.beginPath();ctx.moveTo(cx+75,cy+76);ctx.lineTo(cx+91,cy+68);ctx.lineTo(cx+82,cy+56);ctx.stroke();
+ ctx.fillStyle='#72e0a5';ctx.font='15px sans-serif';ctx.fillText('회전',cx+112,cy+70);
+}
+function drawGraph(){
+ let W=graph.width,H=graph.height;g.clearRect(0,0,W,H);g.fillStyle='#0b1729';g.fillRect(0,0,W,H);
+ let l=55,r=W-18,t=18,b=H-38;g.strokeStyle='#49617e';g.lineWidth=1;g.beginPath();g.moveTo(l,t);g.lineTo(l,b);g.lineTo(r,b);g.stroke();
+ let v=vals(),max=v.N*v.B*v.A*2*Math.PI*600/60;max=Math.max(max,0.1);let yMax=max*1.1;
+ g.font='12px sans-serif';g.fillStyle='#a9bad2';g.fillText('최대 전압 (V)',8,14);g.fillText('회전 속도 (rpm)',r-105,H-8);
+ for(let i=0;i<=4;i++){let y=b-(b-t)*i/4;g.strokeStyle='#203651';g.beginPath();g.moveTo(l,y);g.lineTo(r,y);g.stroke();g.fillText((yMax*i/4).toFixed(1),8,y+4)}
+ for(let i=0;i<=6;i++){let x=l+(r-l)*i/6;g.fillText(String(i*100),x-9,b+18)}
+ g.strokeStyle='#55d6e8';g.lineWidth=3;g.beginPath();
+ for(let rpm=0;rpm<=600;rpm+=5){let emf=v.N*v.B*v.A*2*Math.PI*rpm/60;let x=l+(r-l)*rpm/600,y=b-(b-t)*emf/yMax;if(rpm===0)g.moveTo(x,y);else g.lineTo(x,y)}g.stroke();
+ let current=v.N*v.B*v.A*2*Math.PI*v.rpm/60,x=l+(r-l)*v.rpm/600,y=b-(b-t)*current/yMax;g.fillStyle='#ffd166';g.beginPath();g.arc(x,y,6,0,Math.PI*2);g.fill();
+}
+function render(){updateLabels();calc();drawMachine();drawGraph()}
+function animate(ts){if(!last)last=ts;let dt=Math.min((ts-last)/1000,.05);last=ts;if(running){let v=vals();angle+=2*Math.PI*v.rpm/60*dt;}render();requestAnimationFrame(animate)}
+['rpm','field','turns','area'].forEach(id=>$(id).addEventListener('input',render));
+$('toggle').onclick=()=>{running=!running;$('toggle').textContent=running?'일시정지':'재생';last=0};
+$('reset').onclick=()=>{ $('rpm').value=120;$('field').value=.5;$('turns').value=200;$('area').value=10;angle=0;running=true;$('toggle').textContent='일시정지';render();};
+$('step').onclick=()=>{angle+=2*Math.PI;render()};
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
